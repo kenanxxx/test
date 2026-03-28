@@ -389,6 +389,157 @@
         .hidden {
             display: none;
         }
+        
+        /* Cüzdan Yönetimi */
+        .wallet-add-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .emoji-picker-btn {
+            width: 70px;
+            height: 70px;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            background: white;
+            font-size: 2em;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .emoji-picker-btn:hover {
+            background: #f0f0ff;
+            transform: scale(1.05);
+        }
+        
+        .emoji-picker {
+            position: absolute;
+            top: 80px;
+            left: 0;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-width: 320px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .emoji-category {
+            margin-bottom: 15px;
+        }
+        
+        .emoji-category-title {
+            font-size: 0.85em;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+        
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 5px;
+        }
+        
+        .emoji-item {
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5em;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: all 0.2s;
+        }
+        
+        .emoji-item:hover {
+            background: #f0f0ff;
+            transform: scale(1.2);
+        }
+        
+        .wallet-list {
+            display: grid;
+            gap: 10px;
+        }
+        
+        .wallet-item {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all 0.3s;
+        }
+        
+        .wallet-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .wallet-item-emoji {
+            font-size: 2em;
+            flex-shrink: 0;
+        }
+        
+        .wallet-item-info {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .wallet-item-name {
+            font-weight: 700;
+            font-size: 1.1em;
+            margin-bottom: 3px;
+        }
+        
+        .wallet-item-address {
+            font-family: monospace;
+            font-size: 0.85em;
+            opacity: 0.9;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        .wallet-item-actions {
+            display: flex;
+            gap: 5px;
+        }
+        
+        .wallet-action-btn {
+            width: 35px;
+            height: 35px;
+            border: none;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .wallet-action-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.1);
+        }
     </style>
 </head>
 <body>
@@ -428,18 +579,42 @@
                     </div>
                 </div>
                 
-                <!-- Ayarlar Kartı -->
+                <!-- Cüzdanlar Kartı -->
                 <div class="card" style="margin-top: 30px;">
-                    <h2>⚙️ Ayarlar</h2>
+                    <h2>👛 Cüzdan Yönetimi</h2>
                     
-                    <div class="form-group">
-                        <label for="wallets">Cüzdanlar (Her satıra bir cüzdan)</label>
-                        <textarea id="wallets" placeholder="💎|Whale #1|7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5&#10;🔥|Smart Trader|HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH&#10;veya sadece adres:&#10;6pkpMrR9Unic4hCCY9NbjW3TRKAQh132ThcsLDBBtKGD"></textarea>
-                        <small style="color: #666; font-size: 0.85em; margin-top: 5px; display: block;">
-                            💡 Format: <strong>emoji|isim|adres</strong> veya sadece <strong>adres</strong><br>
-                            👉 Örnek: 💎|Whale Hunter|7YttLkHD...2pbs
-                        </small>
+                    <!-- Cüzdan Ekle Formu -->
+                    <div class="wallet-add-form">
+                        <div class="form-row">
+                            <div class="form-group" style="flex: 0 0 80px; margin-bottom: 0;">
+                                <label>Emoji</label>
+                                <button type="button" class="emoji-picker-btn" id="emoji-btn" onclick="toggleEmojiPicker()">
+                                    <span id="selected-emoji">👤</span>
+                                </button>
+                                <!-- Emoji Picker Popup -->
+                                <div class="emoji-picker" id="emoji-picker" style="display: none;"></div>
+                            </div>
+                            <div class="form-group" style="flex: 1; margin-bottom: 0; margin-left: 10px;">
+                                <label>Cüzdan İsmi</label>
+                                <input type="text" id="wallet-name" placeholder="örn: Whale Hunter, Smart Trader">
+                            </div>
+                        </div>
+                        <div class="form-group" style="margin-top: 10px;">
+                            <label>Cüzdan Adresi</label>
+                            <input type="text" id="wallet-address" placeholder="Solana cüzdan adresi...">
+                        </div>
+                        <button class="btn-secondary" onclick="addWallet()" style="width: 100%;">
+                            ➕ Cüzdan Ekle
+                        </button>
                     </div>
+                    
+                    <!-- Cüzdan Listesi -->
+                    <div class="wallet-list" id="wallet-list" style="margin-top: 20px;">
+                        <!-- Cüzdanlar buraya dinamik eklenecek -->
+                    </div>
+                    
+                    <hr style="margin: 20px 0; border: none; border-top: 1px solid #e0e0e0;">
+                    <h3 style="margin-bottom: 15px;">🛠️ Diğer Ayarlar</h3>
                     
                     <div class="form-group">
                         <label for="min-mcap">Minimum Market Cap ($)</label>
@@ -483,6 +658,152 @@
     
     <script>
         let updateInterval;
+        let wallets = [];  // Cüzdan listesi
+        
+        // Emoji koleksiyonu
+        const emojiCategories = {
+            'Kripto & Para': ['💎', '💰', '💸', '💵', '💴', '💶', '💷', '💳', '🪙', '⚡', '🔥', '🚀', '⭐', '🌟', '🌠'],
+            'Hayvanlar': ['🐋', '🐳', '🐋', '🦈', '🦁', '🐯', '🦁', '🐺', '🦊', '🦅', '🦉', '🐉', '🐲', '🦖'],
+            'Yüz & İfade': ['😎', '🤑', '🤓', '😏', '😈', '👽', '🤖', '👾', '💀', '👹', '👺', '🤡', '🤠', '🤯'],
+            'Semboller': ['🎯', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '❔', '❗', '⚠️', '🚫', '✅', '❌', '⭕', '☑️'],
+            'Objeler': ['💣', '🔫', '🗡️', '⚔️', '🔪', '🎲', '🎰', '🎱', '🎮', '🔥', '⚡', '💥', '✨', '🌟'],
+            'Bayraklar': ['🏁', '🏴', '🏳️', '🏴‍☠️', '🚩', '🏁']
+        };
+        
+        // Emoji picker'ı aç/kapat
+        function toggleEmojiPicker() {
+            const picker = document.getElementById('emoji-picker');
+            if (picker.style.display === 'none') {
+                showEmojiPicker();
+            } else {
+                picker.style.display = 'none';
+            }
+        }
+        
+        // Emoji picker'ı göster
+        function showEmojiPicker() {
+            const picker = document.getElementById('emoji-picker');
+            let html = '';
+            
+            for (const [category, emojis] of Object.entries(emojiCategories)) {
+                html += `
+                    <div class="emoji-category">
+                        <div class="emoji-category-title">${category}</div>
+                        <div class="emoji-grid">
+                            ${emojis.map(emoji => `
+                                <div class="emoji-item" onclick="selectEmoji('${emoji}')">${emoji}</div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            picker.innerHTML = html;
+            picker.style.display = 'block';
+        }
+        
+        // Emoji seç
+        function selectEmoji(emoji) {
+            document.getElementById('selected-emoji').textContent = emoji;
+            document.getElementById('emoji-picker').style.display = 'none';
+        }
+        
+        // Cüzdan ekle
+        function addWallet() {
+            const emoji = document.getElementById('selected-emoji').textContent;
+            const name = document.getElementById('wallet-name').value.trim();
+            const address = document.getElementById('wallet-address').value.trim();
+            
+            if (!address) {
+                showAlert('Lütfen cüzdan adresi girin!', 'error');
+                return;
+            }
+            
+            // Adres format kontrolü (basit)
+            if (address.length < 32) {
+                showAlert('Geçersiz cüzdan adresi!', 'error');
+                return;
+            }
+            
+            // Aynı adres var mı kontrol et
+            if (wallets.some(w => w.address === address)) {
+                showAlert('Bu cüzdan zaten ekli!', 'error');
+                return;
+            }
+            
+            // Cüzdanı ekle
+            const wallet = {
+                emoji: emoji,
+                name: name || 'Bilinmeyen Cüzdan',
+                address: address
+            };
+            
+            wallets.push(wallet);
+            
+            // Formu temizle
+            document.getElementById('selected-emoji').textContent = '👤';
+            document.getElementById('wallet-name').value = '';
+            document.getElementById('wallet-address').value = '';
+            
+            // Listeyi güncelle
+            renderWalletList();
+            
+            showAlert('Cüzdan eklendi!', 'success');
+        }
+        
+        // Cüzdan sil
+        function removeWallet(index) {
+            if (confirm('Bu cüzdanı silmek istediğinizden emin misiniz?')) {
+                wallets.splice(index, 1);
+                renderWalletList();
+                showAlert('Cüzdan silindi!', 'success');
+            }
+        }
+        
+        // Cüzdan düzenle
+        function editWallet(index) {
+            const wallet = wallets[index];
+            
+            // Formu doldur
+            document.getElementById('selected-emoji').textContent = wallet.emoji;
+            document.getElementById('wallet-name').value = wallet.name;
+            document.getElementById('wallet-address').value = wallet.address;
+            
+            // Eski cüzdanı sil
+            wallets.splice(index, 1);
+            renderWalletList();
+            
+            // Scroll to form
+            document.getElementById('wallet-name').focus();
+        }
+        
+        // Cüzdan listesini render et
+        function renderWalletList() {
+            const container = document.getElementById('wallet-list');
+            
+            if (wallets.length === 0) {
+                container.innerHTML = '<div style="text-align: center; padding: 20px; color: #666;">Henüz cüzdan eklenmedi</div>';
+                return;
+            }
+            
+            container.innerHTML = wallets.map((wallet, index) => `
+                <div class="wallet-item">
+                    <div class="wallet-item-emoji">${wallet.emoji}</div>
+                    <div class="wallet-item-info">
+                        <div class="wallet-item-name">${wallet.name}</div>
+                        <div class="wallet-item-address">${wallet.address}</div>
+                    </div>
+                    <div class="wallet-item-actions">
+                        <button class="wallet-action-btn" onclick="editWallet(${index})" title="Düzenle">
+                            ✏️
+                        </button>
+                        <button class="wallet-action-btn" onclick="removeWallet(${index})" title="Sil">
+                            🗑️
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
         
         // Tarih formatla
         function formatDate(timestamp) {
@@ -566,7 +887,34 @@
                 const response = await fetch('/api/config');
                 const config = await response.json();
                 
-                document.getElementById('wallets').value = config.wallets.join('\n');
+                // Cüzdanları parse et
+                wallets = [];
+                if (config.wallets && config.wallets.length > 0) {
+                    config.wallets.forEach(walletStr => {
+                        const parts = walletStr.split('|');
+                        if (parts.length === 3) {
+                            wallets.push({
+                                emoji: parts[0],
+                                name: parts[1],
+                                address: parts[2]
+                            });
+                        } else if (parts.length === 2) {
+                            wallets.push({
+                                emoji: '👤',
+                                name: parts[0],
+                                address: parts[1]
+                            });
+                        } else {
+                            wallets.push({
+                                emoji: '👤',
+                                name: 'Cüzdan',
+                                address: walletStr
+                            });
+                        }
+                    });
+                }
+                renderWalletList();
+                
                 document.getElementById('min-mcap').value = config.min_mcap;
                 document.getElementById('max-mcap').value = config.max_mcap;
                 document.getElementById('rpc-url').value = config.rpc_url;
@@ -578,13 +926,11 @@
         
         // Config'i kaydet
         async function saveConfig() {
-            const wallets = document.getElementById('wallets').value
-                .split('\n')
-                .map(w => w.trim())
-                .filter(w => w.length > 0);
+            // Cüzdanları format:  emoji|name|address
+            const walletStrings = wallets.map(w => `${w.emoji}|${w.name}|${w.address}`);
             
             const config = {
-                wallets: wallets,
+                wallets: walletStrings,
                 min_mcap: parseFloat(document.getElementById('min-mcap').value),
                 max_mcap: parseFloat(document.getElementById('max-mcap').value),
                 rpc_url: document.getElementById('rpc-url').value,
