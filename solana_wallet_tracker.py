@@ -248,7 +248,7 @@ class SolanaWalletTracker:
         while self.is_running:
             try:
                 # Son işlemleri al (limit artırıldı - daha fazla işlem tara)
-                transactions = await self.get_wallet_transactions(wallet_address, limit=15)
+                transactions = await self.get_wallet_transactions(wallet_address, limit=20)
                 
                 if first_run:
                     # İlk çalıştırmada sadece son signature'ı kaydet
@@ -256,7 +256,7 @@ class SolanaWalletTracker:
                         last_signature = transactions[0]['signature']
                         print(f"✓ {wallet_address[:8]}...{wallet_address[-4:]} başlatıldı (son tx: {last_signature[:8]}...)")
                     first_run = False
-                    await asyncio.sleep(self.poll_interval)
+                    # İLK ÇALIŞTIRMADA BEKLEMEDEN DEVAM ET! (hemen işlemleri kontrol et)
                     continue
                 
                 new_transactions = []
