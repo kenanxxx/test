@@ -134,8 +134,17 @@ POLL_INTERVAL=10
 | `max_mcap` | Maximum market cap (USD) | `10000000` |
 | `wallets` | Takip edilecek cüzdanlar (virgülle ayrılmış) | - |
 | `web_port` | Web UI portu | `8080` |
-| `poll_interval` | Polling süresi (saniye) | `10` |
+| `poll_interval` | İşlemleri kontrol etme sıklığı (saniye) | `5` |
 | `cache_duration` | Cache süresi (saniye) | `300` |
+
+### Polling Interval Ayarları
+
+| Değer | Hız | Açıklama |
+|-------|-----|------------|
+| 1-3 saniye | ⚡ Çok Hızlı | Anlık tespit, RPC limiti riskli |
+| **5 saniye** | 🚀 **Hızlı (Önerilen)** | **Hızlı tespit, güvenli** |
+| 10 saniye | 🐢 Normal | Eski varsayılan, yavaş |
+| 15+ saniye | 🐌 Yavaş | RPC dostu ama tespit gecikmeli |
 
 ## Örnek Çıktı
 

@@ -29,8 +29,8 @@ class Config:
     WEB_HOST = os.getenv("WEB_HOST", "0.0.0.0")
     WEB_PORT = int(os.getenv("WEB_PORT", "8080"))
     
-    # Polling interval (saniye)
-    POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "10"))
+    # Polling interval (saniye) - İşlemleri kontrol etme sıklığı
+    POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))  # 5 saniye (daha hızlı)
     
     # Cache süresi (saniye)
     CACHE_DURATION = int(os.getenv("CACHE_DURATION", "300"))
