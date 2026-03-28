@@ -58,8 +58,9 @@ class SolanaWalletTracker:
                 return cached_data['mcap']
         
         try:
-            # DexScreener API'den market cap bilgisi al
-            async with aiohttp.ClientSession() as session:
+            # DexScreener API'den market cap bilgisi al (timeout ekle)
+            timeout = aiohttp.ClientTimeout(total=8)  # 8 saniye timeout
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 url = f"https://api.dexscreener.com/latest/dex/tokens/{token_address}"
                 async with session.get(url) as response:
                     if response.status == 200:
@@ -76,8 +77,13 @@ class SolanaWalletTracker:
                                 'symbol': pair.get('baseToken', {}).get('symbol', 'Unknown')
                             }
                             return mcap
+                    elif response.status == 404:
+                        # Token DexScreener'da yok
+                        return None
+        except asyncio.TimeoutError:
+            print(f"⏱️  DexScreener timeout: {token_address[:8]}...")
         except Exception as e:
-            print(f"Market cap alınamadı {token_address}: {str(e)}")
+            print(f"❌ Market cap alınamadı {token_address[:8]}...: {str(e)}")
         
         return None
     

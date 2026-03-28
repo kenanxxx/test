@@ -121,10 +121,22 @@ class WebSocketTracker(SolanaWalletTracker):
                 
                 for token in parsed['tokens']:
                     if token.get('type') == 'buy' and token.get('mint'):
-                        print(f"   🎯 ALIM tespit edildi: {token['mint'][:16]}...")
+                        mint = token['mint']
+                        print(f"   🎯 ALIM tespit edildi: {mint[:16]}...")
+                        print(f"   🔍 DexScreener sorgulanıyor...")
                         
-                        # Market cap kontrol
-                        mcap = await self.get_token_mcap(token['mint'])
+                        # Market cap kontrol (timeout ekle)
+                        try:
+                            mcap = await asyncio.wait_for(
+                                self.get_token_mcap(mint),
+                                timeout=10.0  # 10 saniye timeout
+                            )
+                        except asyncio.TimeoutError:
+                            print(f"   ⏱️  DexScreener timeout! (10s)")
+                            mcap = None
+                        except Exception as e:
+                            print(f"   ❌ Market cap hatası: {e}")
+                            mcap = None
                         
                         if mcap:
                             print(f"   💰 Market Cap: ${mcap:,.0f}")
@@ -138,9 +150,10 @@ class WebSocketTracker(SolanaWalletTracker):
                                     mcap
                                 )
                             else:
-                                print(f"   ❌ Market cap aralık dışı")
+                                print(f"   ❌ Market cap aralık dışı (${self.min_mcap:,.0f} - ${self.max_mcap:,.0f})")
                         else:
-                            print(f"   ⚠️  Market cap bulunamadı")
+                            print(f"   ⚠️  Market cap bulunamadı - Token: {mint}")
+                            print(f"   ℹ️  Yeni token olabilir veya DexScreener'da yok")
             else:
                 print(f"   ℹ️  Token değişimi yok (SOL transfer olabilir)")
                 
