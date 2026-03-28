@@ -118,6 +118,7 @@ class WebSocketTracker(SolanaWalletTracker):
             
             if parsed and parsed['tokens']:
                 print(f"   ✓ {len(parsed['tokens'])} token değişimi bulundu")
+                print(f"   📄 Token detay: {parsed['tokens']}")
                 
                 for token in parsed['tokens']:
                     if token.get('type') == 'buy' and token.get('mint'):
