@@ -632,9 +632,19 @@
                     </div>
                     
                     <div class="form-group">
+                        <label for="tracking-mode">Takip Modu 🚀</label>
+                        <select id="tracking-mode" style="width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 1em;">
+                            <option value="polling">Polling (Klasik - 2s gecikme)</option>
+                            <option value="websocket" selected>⚡ WebSocket (Gerçek Zamanlı - <1s gecikme)</option>
+                        </select>
+                        <small style="color: #666; font-size: 0.85em;">WebSocket: Public RPC ile çalışır, daha hızlı!</small>
+                    </div>
+                    
+                    <div class="form-group">
                         <label for="poll-interval">Polling Interval (saniye) - İşlemleri Kontrol Etme Sıklığı</label>
                         <input type="number" id="poll-interval" value="2" min="1" max="60">
-                        <small style="color: #666; font-size: 0.85em;">1 saniye = Lightning ⚡ | 2 saniye = Çok Hızlı (önerilen) | 5+ saniye = Yavaş</small>
+                        <small style="color: #666; font-size: 0.85em;">1 saniye = Lightning ⚡ | 2 saniye = Çok Hızlı (önerilen) | 5+ saniye = Yavaş<br>
+                        <strong>Not:</strong> WebSocket modunda polling interval kullanılmaz</small>
                     </div>
                     
                     <button class="btn-secondary" onclick="saveConfig()">💾 Ayarları Kaydet</button>
@@ -966,7 +976,14 @@
         // Tracker'ı başlat
         async function startTracker() {
             try {
-                const response = await fetch('/api/start', { method: 'POST' });
+                // Mode'u al
+                const mode = document.getElementById('tracking-mode').value;
+                
+                const response = await fetch('/api/start', { 
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ mode: mode })
+                });
                 const result = await response.json();
                 
                 if (result.success) {

@@ -11,6 +11,11 @@ from pathlib import Path
 from datetime import datetime
 from config import Config
 from solana_wallet_tracker import SolanaWalletTracker
+try:
+    from websocket_tracker_v2 import WebSocketTracker
+    WEBSOCKET_AVAILABLE = True
+except ImportError:
+    WEBSOCKET_AVAILABLE = False
 import json
 
 
@@ -189,14 +194,30 @@ class WebApp:
                     'error': 'Tracker zaten çalışıyor'
                 }, status=400)
             
-            # Yeni tracker oluştur
-            self.tracker = SolanaWalletTracker(
-                rpc_url=Config.SOLANA_RPC_URL,
-                min_mcap=Config.MIN_MCAP,
-                max_mcap=Config.MAX_MCAP,
-                cache_duration=Config.CACHE_DURATION,
-                poll_interval=Config.POLL_INTERVAL
-            )
+            # Mode kontrol et (data'dan mode alınabilir)
+            data = await request.json() if request.can_read_body else {}
+            mode = data.get('mode', 'polling')  # 'polling' veya 'websocket'
+            
+            # Yeni tracker oluştur (WebSocket veya Polling)
+            if mode == 'websocket' and WEBSOCKET_AVAILABLE:
+                print("⚡ WebSocket mode aktif!")
+                self.tracker = WebSocketTracker(
+                    rpc_url=Config.SOLANA_RPC_URL,
+                    min_mcap=Config.MIN_MCAP,
+                    max_mcap=Config.MAX_MCAP,
+                    cache_duration=Config.CACHE_DURATION,
+                    poll_interval=Config.POLL_INTERVAL
+                )
+            else:
+                if mode == 'websocket':
+                    print("⚠️  WebSocket mevcut değil, Polling kullanılıyor")
+                self.tracker = SolanaWalletTracker(
+                    rpc_url=Config.SOLANA_RPC_URL,
+                    min_mcap=Config.MIN_MCAP,
+                    max_mcap=Config.MAX_MCAP,
+                    cache_duration=Config.CACHE_DURATION,
+                    poll_interval=Config.POLL_INTERVAL
+                )
             
             # Cüzdanları ekle
             self.tracker.add_wallets(Config.get_wallets())
