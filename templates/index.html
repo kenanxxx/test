@@ -660,14 +660,14 @@
         let updateInterval;
         let wallets = [];  // Cüzdan listesi
         
-        // Emoji koleksiyonu
+        // Emoji koleksiyonu (80+ emoji!)
         const emojiCategories = {
-            'Kripto & Para': ['💎', '💰', '💸', '💵', '💴', '💶', '💷', '💳', '🪙', '⚡', '🔥', '🚀', '⭐', '🌟', '🌠'],
-            'Hayvanlar': ['🐋', '🐳', '🐋', '🦈', '🦁', '🐯', '🦁', '🐺', '🦊', '🦅', '🦉', '🐉', '🐲', '🦖'],
-            'Yüz & İfade': ['😎', '🤑', '🤓', '😏', '😈', '👽', '🤖', '👾', '💀', '👹', '👺', '🤡', '🤠', '🤯'],
-            'Semboller': ['🎯', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '❔', '❗', '⚠️', '🚫', '✅', '❌', '⭕', '☑️'],
-            'Objeler': ['💣', '🔫', '🗡️', '⚔️', '🔪', '🎲', '🎰', '🎱', '🎮', '🔥', '⚡', '💥', '✨', '🌟'],
-            'Bayraklar': ['🏁', '🏴', '🏳️', '🏴‍☠️', '🚩', '🏁']
+            'Kripto & Para': ['💎', '💰', '💸', '💵', '💴', '💶', '💷', '💳', '🪙', '⚡', '🔥', '🚀', '⭐', '🌟', '🌠', '💫', '✨', '🌈', '🔆', '☀️'],
+            'Hayvanlar': ['🐋', '🐳', '🦈', '🦁', '🐯', '🐺', '🦊', '🦅', '🦉', '🐉', '🐲', '🦖', '🦕', '🦏', '🐘', '🦍', '🦒', '🐆', '🐅', '🐃', '🐂', '🐪', '🦘', '🦌', '🐎'],
+            'Yüz & İfade': ['😎', '🤑', '🤓', '😏', '😈', '👽', '🤖', '👾', '💀', '👹', '👺', '🤡', '🤠', '🤯', '😱', '🤩', '🥳', '🥸', '🤗', '🤔', '🧐', '😇', '🥶', '🥵', '🤪'],
+            'Semboller': ['🎯', '🏆', '🥇', '🥈', '🥉', '🏅', '🎖️', '❔', '❗', '⚠️', '🚫', '✅', '❌', '⭕', '☑️', '🔱', '⚜️', '🔰', '♻️', '⚙️', '🔧', '🔨', '⛏️', '🛠️', '⚔️'],
+            'Objeler': ['💣', '🔫', '🗡️', '⚔️', '🔪', '🎲', '🎰', '🎱', '🎮', '🔥', '⚡', '💥', '✨', '🌟', '🎯', '🎪', '🎨', '🎭', '🎬', '🎤', '🎧', '🎼', '🎹', '🎸', '🎺'],
+            'Bayraklar & Diğer': ['🏁', '🏴', '🏳️', '🏴‍☠️', '🚩', '🎌', '🏳️‍🌈', '🏴‍☠️', '🚀', '🛸', '🛰️', '🌍', '🌎', '🌏', '🗺️', '🧭', '🏔️', '⛰️', '🌋', '🏕️']
         };
         
         // Emoji picker'ı aç/kapat
@@ -748,7 +748,10 @@
             // Listeyi güncelle
             renderWalletList();
             
-            showAlert('Cüzdan eklendi!', 'success');
+            // ÖNEMLİ: Değişiklikleri kaydet!
+            saveConfig();
+            
+            showAlert('Cüzdan eklendi ve kaydedildi!', 'success');
         }
         
         // Cüzdan sil
@@ -756,7 +759,11 @@
             if (confirm('Bu cüzdanı silmek istediğinizden emin misiniz?')) {
                 wallets.splice(index, 1);
                 renderWalletList();
-                showAlert('Cüzdan silindi!', 'success');
+                
+                // ÖNEMLİ: Değişiklikleri kaydet!
+                saveConfig();
+                
+                showAlert('Cüzdan silindi ve kaydedildi!', 'success');
             }
         }
         
