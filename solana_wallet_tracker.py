@@ -137,7 +137,11 @@ class SolanaWalletTracker:
                         print(f"   ⏱️  Timeout: {str(sig_info.signature)[:16]}... (RPC yanıt vermiyor)")
                         continue
                     except Exception as e:
-                        print(f"   ❌ TX okunamadı {str(sig_info.signature)[:16]}...: {type(e).__name__} - {str(e)}")
+                        error_msg = str(e) if str(e) else repr(e)
+                        # Eski/silinmiş transaction hatalarını sessizce atla
+                        if 'not found' in error_msg.lower() or not error_msg:
+                            continue
+                        print(f"   ❌ TX okunamadı {str(sig_info.signature)[:16]}...: {type(e).__name__} - {error_msg}")
                         continue
                 
                 return transactions
@@ -247,8 +251,8 @@ class SolanaWalletTracker:
         
         while self.is_running:
             try:
-                # Son işlemleri al (limit artırıldı - daha fazla işlem tara)
-                transactions = await self.get_wallet_transactions(wallet_address, limit=20)
+                # Son işlemleri al (limit 10 = hız/performans dengesi)
+                transactions = await self.get_wallet_transactions(wallet_address, limit=10)
                 
                 if first_run:
                     # İlk çalıştırmada sadece son signature'ı kaydet
