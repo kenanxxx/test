@@ -333,7 +333,14 @@ class SolanaWalletTracker:
         # Padre.gg trade URL
         trade_url = f"https://trade.padre.gg/trade/solana/{token_info['mint']}"
         
-        # Notification data
+        # Timestamp'ı serialize et
+        timestamp = tx_info['timestamp']
+        if isinstance(timestamp, datetime):
+            timestamp = int(timestamp.timestamp())  # Unix timestamp'e çevir
+        elif timestamp is None:
+            timestamp = int(datetime.now().timestamp())
+        
+        # Notification data (JSON serializable)
         notification = {
             'wallet': wallet,
             'token_address': token_info['mint'],
@@ -342,7 +349,7 @@ class SolanaWalletTracker:
             'market_cap': mcap,
             'amount': real_amount,
             'type': token_info['type'],
-            'timestamp': tx_info['timestamp'],
+            'timestamp': timestamp,  # Unix timestamp (int)
             'signature': tx_info['signature'],
             'solscan_url': f"https://solscan.io/tx/{tx_info['signature']}",
             'trade_url': trade_url

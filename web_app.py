@@ -71,10 +71,33 @@ class WebApp:
         }
         return web.json_response(status)
     
+    def serialize_transaction(self, tx: dict) -> dict:
+        """Transaction objesini JSON serialize edilebilir hale getir"""
+        serialized = tx.copy()
+        
+        # datetime objelerini ISO string'e çevir
+        if 'timestamp' in serialized and serialized['timestamp']:
+            if isinstance(serialized['timestamp'], datetime):
+                serialized['timestamp'] = serialized['timestamp'].isoformat()
+            elif isinstance(serialized['timestamp'], int):
+                # Unix timestamp ise datetime'a çevir sonra ISO string'e
+                serialized['timestamp'] = datetime.fromtimestamp(serialized['timestamp']).isoformat()
+        
+        if 'detected_at' in serialized and isinstance(serialized['detected_at'], datetime):
+            serialized['detected_at'] = serialized['detected_at'].isoformat()
+        
+        return serialized
+    
     async def get_transactions(self, request):
         """İşlem geçmişini getir"""
+        # Son 50 işlemi serialize et
+        transactions = [
+            self.serialize_transaction(tx) 
+            for tx in self.transactions_history[-50:][::-1]
+        ]
+        
         return web.json_response({
-            'transactions': self.transactions_history[-50:][::-1]  # Son 50 işlem, ters sırada
+            'transactions': transactions
         })
     
     async def get_config(self, request):
