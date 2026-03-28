@@ -8,7 +8,7 @@ from solana.rpc.async_api import AsyncClient
 from solders.pubkey import Pubkey
 from datetime import datetime
 import json
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 import os
 
 
@@ -18,13 +18,19 @@ class SolanaWalletTracker:
         rpc_url: str = "https://api.mainnet-beta.solana.com",
         min_mcap: float = 100000,  # Minimum market cap (USD)
         max_mcap: float = 10000000,  # Maximum market cap (USD)
+        cache_duration: int = 300,  # Cache süresi (saniye)
+        poll_interval: int = 10,  # Polling interval (saniye)
     ):
         self.rpc_url = rpc_url
         self.client = AsyncClient(rpc_url)
         self.min_mcap = min_mcap
         self.max_mcap = max_mcap
+        self.cache_duration = cache_duration
+        self.poll_interval = poll_interval
         self.tracked_wallets: List[str] = []
         self.token_cache: Dict[str, Dict] = {}
+        self.transaction_callbacks: List[Callable] = []
+        self.is_running = False
         
     async def close(self):
         """RPC client'ı kapat"""
@@ -48,7 +54,7 @@ class SolanaWalletTracker:
         # Cache kontrol
         if token_address in self.token_cache:
             cached_data = self.token_cache[token_address]
-            if (datetime.now() - cached_data['timestamp']).seconds < 300:  # 5 dakika cache
+            if (datetime.now() - cached_data['timestamp']).seconds < self.cache_duration:
                 return cached_data['mcap']
         
         try:
@@ -196,12 +202,16 @@ class SolanaWalletTracker:
                 if transactions:
                     last_signature = transactions[0]['signature']
                 
-                # 10 saniye bekle
-                await asyncio.sleep(10)
+                # Polling interval kadar bekle
+                await asyncio.sleep(self.poll_interval)
                 
             except Exception as e:
                 print(f"Hata oluştu {wallet_address}: {str(e)}")
                 await asyncio.sleep(10)
+    
+    def add_transaction_callback(self, callback: Callable):
+        """İşlem tespit edildiğinde çağrılacak callback ekle"""
+        self.transaction_callbacks.append(callback)
     
     async def notify_transaction(
         self,
@@ -219,6 +229,25 @@ class SolanaWalletTracker:
         decimals = int(token_info.get('decimals', 0))
         real_amount = amount / (10 ** decimals) if decimals > 0 else amount
         
+        # Padre.gg trade URL
+        trade_url = f"https://trade.padre.gg/trade/solana/{token_info['mint']}"
+        
+        # Notification data
+        notification = {
+            'wallet': wallet,
+            'token_address': token_info['mint'],
+            'token_name': name,
+            'token_symbol': symbol,
+            'market_cap': mcap,
+            'amount': real_amount,
+            'type': token_info['type'],
+            'timestamp': tx_info['timestamp'],
+            'signature': tx_info['signature'],
+            'solscan_url': f"https://solscan.io/tx/{tx_info['signature']}",
+            'trade_url': trade_url
+        }
+        
+        # Console output
         print("\n" + "="*80)
         print(f"🔔 YENİ İŞLEM TESPİT EDİLDİ!")
         print(f"Cüzdan: {wallet[:8]}...{wallet[-8:]}")
@@ -229,7 +258,15 @@ class SolanaWalletTracker:
         print(f"Zaman: {tx_info['timestamp']}")
         print(f"Signature: {tx_info['signature']}")
         print(f"Solscan: https://solscan.io/tx/{tx_info['signature']}")
+        print(f"Trade: {trade_url}")
         print("="*80)
+        
+        # Callback'leri çağır
+        for callback in self.transaction_callbacks:
+            try:
+                await callback(notification)
+            except Exception as e:
+                print(f"Callback hatası: {e}")
     
     async def start_tracking(self):
         """Tüm cüzdanları takip etmeye başla"""
@@ -237,6 +274,7 @@ class SolanaWalletTracker:
             print("❌ Takip edilecek cüzdan eklenmedi!")
             return
         
+        self.is_running = True
         print(f"\n🚀 Tracker başlatılıyor...")
         print(f"Market Cap Aralığı: ${self.min_mcap:,.0f} - ${self.max_mcap:,.0f}")
         print(f"Takip edilen cüzdan sayısı: {len(self.tracked_wallets)}")
@@ -248,6 +286,23 @@ class SolanaWalletTracker:
         ]
         
         await asyncio.gather(*tasks)
+    
+    async def stop_tracking(self):
+        """Tracking'i durdur"""
+        self.is_running = False
+        print("\n⏹️  Tracker durduruluyor...")
+    
+    def get_status(self) -> Dict:
+        """Tracker durumunu döndür"""
+        return {
+            'is_running': self.is_running,
+            'tracked_wallets': self.tracked_wallets,
+            'min_mcap': self.min_mcap,
+            'max_mcap': self.max_mcap,
+            'rpc_url': self.rpc_url,
+            'poll_interval': self.poll_interval,
+            'cache_duration': self.cache_duration
+        }
 
 
 async def main():

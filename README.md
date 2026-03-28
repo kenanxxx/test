@@ -11,6 +11,8 @@ Solana ağında belirli market cap aralığında birden fazla cüzdanın token i
 - 🎯 Token transfer tespiti
 - ⚡ Async/await ile performanslı çalışma
 - 💾 Market cap cache sistemi
+- 🌐 Web arayüzü ile kolay yönetim
+- 🔗 Padre.gg trade entegrasyonu
 
 ## Kurulum
 
@@ -21,7 +23,31 @@ pip install -r requirements.txt
 
 ## Kullanım
 
-### Basit Kullanım
+### Web Arayüzü ile Kullanım (Önerilen)
+
+```bash
+# .env dosyası oluştur
+cp .env.example .env
+
+# .env dosyasını düzenle ve cüzdanları ekle
+# WALLETS=cuzdan1,cuzdan2,cuzdan3
+
+# Web UI'yı başlat
+python web_app.py
+
+# Tarayıcıda aç
+http://localhost:8080
+```
+
+**Web Arayüzü Özellikleri:**
+- 📊 Canlı durum takibi
+- ⚙️ Tüm ayarları web'den yönetme
+- 📝 Cüzdan ekleme/çıkarma
+- 💰 Market cap aralığını ayarlama
+- 📈 İşlem geçmişi görüntüleme
+- 🔗 Padre.gg trade linklerine tek tıkla erişim
+
+### Basit Kullanım (Komut Satırı)
 
 ```python
 import asyncio
@@ -57,14 +83,24 @@ tracker = SolanaWalletTracker(
 )
 ```
 
-### Environment Variable ile RPC
+### Environment Variable ile Konfigürasyon
 
 ```bash
-# .env dosyası oluştur veya export et
-export SOLANA_RPC_URL="https://your-rpc-endpoint.com"
+# .env.example'dan .env oluştur
+cp .env.example .env
 
-# Scripti çalıştır
-python solana_wallet_tracker.py
+# .env dosyasını düzenle
+nano .env
+```
+
+**.env Örnek:**
+```env
+SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
+MIN_MCAP=100000
+MAX_MCAP=10000000
+WALLETS=wallet1,wallet2,wallet3
+WEB_PORT=8080
+POLL_INTERVAL=10
 ```
 
 ## Yapılandırma Parametreleri
@@ -74,6 +110,10 @@ python solana_wallet_tracker.py
 | `rpc_url` | Solana RPC endpoint | `https://api.mainnet-beta.solana.com` |
 | `min_mcap` | Minimum market cap (USD) | `100000` |
 | `max_mcap` | Maximum market cap (USD) | `10000000` |
+| `wallets` | Takip edilecek cüzdanlar (virgülle ayrılmış) | - |
+| `web_port` | Web UI portu | `8080` |
+| `poll_interval` | Polling süresi (saniye) | `10` |
+| `cache_duration` | Cache süresi (saniye) | `300` |
 
 ## Örnek Çıktı
 
@@ -92,6 +132,7 @@ Tip: transferChecked
 Zaman: 2026-03-28 10:30:45
 Signature: 3kX7...9mNp
 Solscan: https://solscan.io/tx/3kX7...9mNp
+Trade: https://trade.padre.gg/trade/solana/TokenAddress
 ================================================================================
 ```
 
