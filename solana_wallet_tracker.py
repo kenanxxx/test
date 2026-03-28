@@ -137,8 +137,38 @@ class SolanaWalletTracker:
                 'tokens': []
             }
             
-            # Token transferlerini bul
-            if hasattr(tx.transaction.transaction, 'message'):
+            # Token değişikliklerini pre/post balances'dan al
+            if hasattr(tx.transaction.meta, 'pre_token_balances') and hasattr(tx.transaction.meta, 'post_token_balances'):
+                pre_balances = tx.transaction.meta.pre_token_balances or []
+                post_balances = tx.transaction.meta.post_token_balances or []
+                
+                # Post balance'ları kontrol et
+                for post in post_balances:
+                    mint = post.mint
+                    post_amount = int(post.ui_token_amount.amount)
+                    decimals = post.ui_token_amount.decimals
+                    
+                    # Pre balance'ı bul
+                    pre_amount = 0
+                    for pre in pre_balances:
+                        if pre.mint == mint and pre.account_index == post.account_index:
+                            pre_amount = int(pre.ui_token_amount.amount)
+                            break
+                    
+                    # Değişim varsa ekle
+                    if post_amount != pre_amount:
+                        token_info = {
+                            'type': 'buy' if post_amount > pre_amount else 'sell',
+                            'mint': str(mint),
+                            'amount': str(abs(post_amount - pre_amount)),
+                            'decimals': decimals,
+                            'pre_balance': pre_amount,
+                            'post_balance': post_amount
+                        }
+                        parsed_info['tokens'].append(token_info)
+            
+            # Alternatif: Instructions'dan parse et
+            if not parsed_info['tokens'] and hasattr(tx.transaction.transaction, 'message'):
                 message = tx.transaction.transaction.message
                 
                 if hasattr(message, 'instructions'):
@@ -162,43 +192,72 @@ class SolanaWalletTracker:
             return parsed_info if parsed_info['tokens'] else None
             
         except Exception as e:
-            print(f"Parse hatası: {str(e)}")
+            print(f"Parse hatası {tx_data.get('signature', 'unknown')}: {str(e)}")
             return None
     
     async def track_wallet(self, wallet_address: str):
         """Tek bir cüzdanı sürekli takip et"""
         print(f"\n📊 Takip ediliyor: {wallet_address}")
         last_signature = None
+        first_run = True
         
-        while True:
+        while self.is_running:
             try:
                 # Son işlemleri al
-                transactions = await self.get_wallet_transactions(wallet_address, limit=5)
+                transactions = await self.get_wallet_transactions(wallet_address, limit=10)
                 
+                if first_run:
+                    # İlk çalıştırmada sadece son signature'ı kaydet
+                    if transactions:
+                        last_signature = transactions[0]['signature']
+                        print(f"✓ {wallet_address[:8]}...{wallet_address[-4:]} başlatıldı (son tx: {last_signature[:8]}...)")
+                    first_run = False
+                    await asyncio.sleep(self.poll_interval)
+                    continue
+                
+                new_transactions = []
                 for tx_data in transactions:
                     # Daha önce görülmüş mü?
                     if last_signature and tx_data['signature'] == last_signature:
                         break
+                    new_transactions.append(tx_data)
+                
+                # Yeni işlemleri ters sırala (en eskiden en yeniye)
+                new_transactions.reverse()
+                
+                for tx_data in new_transactions:
+                    print(f"\n🔍 Yeni TX tespit edildi: {tx_data['signature'][:16]}...")
                     
                     # İşlemi parse et
                     parsed = await self.parse_transaction(tx_data)
                     
                     if parsed and parsed['tokens']:
+                        print(f"   ✓ {len(parsed['tokens'])} token değişimi bulundu")
                         # Her token için market cap kontrol et
                         for token in parsed['tokens']:
                             if token.get('mint'):
+                                print(f"   🔎 Token kontrol ediliyor: {token['mint'][:16]}...")
                                 mcap = await self.get_token_mcap(token['mint'])
                                 
-                                if self.is_in_mcap_range(mcap):
-                                    # Bildiri göster
-                                    await self.notify_transaction(
-                                        wallet_address,
-                                        parsed,
-                                        token,
-                                        mcap
-                                    )
+                                if mcap:
+                                    print(f"   💰 Market Cap: ${mcap:,.0f}")
+                                    if self.is_in_mcap_range(mcap):
+                                        print(f"   ✅ Market cap aralıkta! Bildirim gönderiliyor...")
+                                        # Bildiri göster
+                                        await self.notify_transaction(
+                                            wallet_address,
+                                            parsed,
+                                            token,
+                                            mcap
+                                        )
+                                    else:
+                                        print(f"   ❌ Market cap aralık dışı (${self.min_mcap:,.0f} - ${self.max_mcap:,.0f})")
+                                else:
+                                    print(f"   ⚠️  Market cap bulunamadı")
+                    else:
+                        print(f"   ⚠️  Token değişimi bulunamadı (swap/transfer değil)")
                 
-                # Son signature'ı kaydet
+                # Son signature'ı güncelle
                 if transactions:
                     last_signature = transactions[0]['signature']
                 
@@ -206,7 +265,9 @@ class SolanaWalletTracker:
                 await asyncio.sleep(self.poll_interval)
                 
             except Exception as e:
-                print(f"Hata oluştu {wallet_address}: {str(e)}")
+                print(f"❌ Hata oluştu {wallet_address[:8]}...{wallet_address[-4:]}: {str(e)}")
+                import traceback
+                traceback.print_exc()
                 await asyncio.sleep(10)
     
     def add_transaction_callback(self, callback: Callable):
