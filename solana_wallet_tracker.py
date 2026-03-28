@@ -198,17 +198,18 @@ class SolanaWalletTracker:
                             pre_amount = int(pre.ui_token_amount.amount)
                             break
                     
-                    # Değişim varsa ekle
-                    if post_amount != pre_amount:
+                    # Değişim varsa ekle - SADECE ALIM (BUY) işlemlerini kaydet!
+                    if post_amount > pre_amount:  # SADECE ARTIŞ = BUY
                         token_info = {
-                            'type': 'buy' if post_amount > pre_amount else 'sell',
+                            'type': 'buy',
                             'mint': str(mint),
-                            'amount': str(abs(post_amount - pre_amount)),
+                            'amount': str(post_amount - pre_amount),  # Artış miktarı
                             'decimals': decimals,
                             'pre_balance': pre_amount,
                             'post_balance': post_amount
                         }
                         parsed_info['tokens'].append(token_info)
+                    # SATIŞ işlemlerini tamamen atla (post_amount < pre_amount)
             
             # Alternatif: Instructions'dan parse et
             if not parsed_info['tokens'] and hasattr(tx.transaction.transaction, 'message'):
