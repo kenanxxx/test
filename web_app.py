@@ -42,6 +42,9 @@ class WebApp:
         self.app.router.add_post('/api/stop', self.stop_tracker)
         self.app.router.add_post('/api/config', self.update_config)
         self.app.router.add_get('/api/config', self.get_config)
+        # Helius Webhook endpoint
+        self.app.router.add_post('/api/webhook', self.handle_webhook)
+        self.app.router.add_get('/api/webhook/health', self.webhook_health)
         self.app.router.add_static('/static', Path(__file__).parent / 'static')
     
     @aiohttp_jinja2.template('index.html')
@@ -247,6 +250,75 @@ class WebApp:
                 'success': False,
                 'error': str(e)
             }, status=500)
+    
+    async def webhook_health(self, request):
+        """Webhook sağlık kontrolü"""
+        return web.json_response({
+            'status': 'ok',
+            'timestamp': datetime.now().isoformat(),
+            'tracker_running': self.tracker is not None and self.tracker.is_running
+        })
+    
+    async def handle_webhook(self, request):
+        """Helius webhook'undan gelen işlemi yakala"""
+        try:
+            data = await request.json()
+            print(f"\n⚡ WEBHOOK ALDI! {len(data)} işlem")
+            
+            for tx_event in data:
+                await self.process_webhook_transaction(tx_event)
+            
+            return web.json_response({'status': 'success'})
+        except Exception as e:
+            print(f"❌ Webhook hatası: {e}")
+            return web.json_response({'status': 'error', 'message': str(e)}, status=500)
+    
+    async def process_webhook_transaction(self, tx_event: dict):
+        """Webhook transaction'ını işle"""
+        try:
+            signature = tx_event.get('signature')
+            timestamp = tx_event.get('timestamp', int(datetime.now().timestamp()))
+            token_transfers = tx_event.get('tokenTransfers', [])
+            
+            if not self.tracker:
+                return
+            
+            for transfer in token_transfers:
+                to_wallet = transfer.get('toUserAccount')
+                
+                # Takip edilen cüzdan token alıyor mu?
+                if to_wallet in self.tracker.tracked_wallets:
+                    mint = transfer.get('mint')
+                    amount = transfer.get('tokenAmount', 0)
+                    
+                    # Market cap kontrol
+                    mcap = await self.tracker.get_token_mcap(mint)
+                    
+                    if mcap and self.tracker.is_in_mcap_range(mcap):
+                        token_data = self.tracker.token_cache.get(mint, {})
+                        
+                        notification = {
+                            'wallet': to_wallet,
+                            'token_address': mint,
+                            'token_name': token_data.get('name', 'Unknown'),
+                            'token_symbol': token_data.get('symbol', mint[:8]),
+                            'market_cap': mcap,
+                            'amount': amount,
+                            'type': 'buy',
+                            'timestamp': timestamp,
+                            'signature': signature,
+                            'solscan_url': f"https://solscan.io/tx/{signature}",
+                            'trade_url': f"https://trade.padre.gg/trade/solana/{mint}"
+                        }
+                        
+                        await self.on_transaction(notification)
+                        
+                        print(f"\n⚡ WEBHOOK - ANLIK İŞLEM!")
+                        print(f"Token: {notification['token_name']} ({notification['token_symbol']})")
+                        print(f"Market Cap: ${mcap:,.0f}")
+                    break
+        except Exception as e:
+            print(f"❌ Webhook TX işleme hatası: {e}")
     
     async def on_transaction(self, notification: dict):
         """Transaction tespit edildiğinde çağrılır"""
