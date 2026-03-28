@@ -199,7 +199,12 @@
             padding: 20px;
             border-radius: 10px;
             margin-bottom: 15px;
-            border-left: 4px solid #667eea;
+            border-left: 4px solid #28a745;
+        }
+        
+        .transaction-item.sell {
+            border-left: 4px solid #dc3545;
+            opacity: 0.7;
         }
         
         .transaction-item:hover {
@@ -217,6 +222,27 @@
             font-size: 1.2em;
             font-weight: 700;
             color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75em;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .badge-buy {
+            background: #28a745;
+            color: white;
+        }
+        
+        .badge-sell {
+            background: #dc3545;
+            color: white;
         }
         
         .mcap {
@@ -404,7 +430,7 @@
             
             <!-- Sağ Kolon: İşlemler -->
             <div class="card">
-                <h2>📈 Bulunan İşlemler</h2>
+                <h2>📈 Bulunan İşlemler (Sadece Alımlar)</h2>
                 <div class="transactions" id="transactions">
                     <div class="no-transactions">
                         Henüz işlem tespit edilmedi. Tracker'ı başlatın.
@@ -417,7 +443,39 @@
     <script>
         let updateInterval;
         
-        // Sayfa yüklendiğinde
+        // Tarih formatla
+        function formatDate(timestamp) {
+            try {
+                // Timestamp saniye veya milisaniye olabilir
+                let date;
+                if (timestamp > 10000000000) {
+                    // Milisaniye
+                    date = new Date(timestamp);
+                } else {
+                    // Saniye (Unix timestamp)
+                    date = new Date(timestamp * 1000);
+                }
+                
+                // Geçerli tarih mi kontrol et
+                if (isNaN(date.getTime())) {
+                    return 'Bilinmiyor';
+                }
+                
+                return date.toLocaleString('tr-TR', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (error) {
+                console.error('Tarih formatlanamadı:', timestamp, error);
+                return 'Bilinmiyor';
+            }
+        }
+        
+        // Sayfa yüklendiginde
         window.addEventListener('load', () => {
             loadConfig();
             updateStatus();
@@ -561,9 +619,14 @@
                 }
                 
                 container.innerHTML = data.transactions.map(tx => `
-                    <div class="transaction-item">
+                    <div class="transaction-item ${tx.type === 'sell' ? 'sell' : ''}">
                         <div class="transaction-header">
-                            <div class="token-name">${tx.token_name} (${tx.token_symbol})</div>
+                            <div class="token-name">
+                                <span>${tx.token_name} (${tx.token_symbol})</span>
+                                <span class="badge ${tx.type === 'buy' ? 'badge-buy' : 'badge-sell'}">
+                                    ${tx.type === 'buy' ? '📈 ALIM' : '📉 SATIŞ'}
+                                </span>
+                            </div>
                             <div class="mcap">$${tx.market_cap.toLocaleString()}</div>
                         </div>
                         
@@ -582,7 +645,7 @@
                             </div>
                             <div class="detail-item">
                                 <span class="detail-label">Zaman:</span><br>
-                                ${new Date(tx.timestamp * 1000).toLocaleString('tr-TR')}
+                                ${formatDate(tx.timestamp)}
                             </div>
                         </div>
                         

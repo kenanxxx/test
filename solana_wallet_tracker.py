@@ -275,8 +275,13 @@ class SolanaWalletTracker:
                         print(f"   ✓ {len(parsed['tokens'])} token değişimi bulundu")
                         # Her token için market cap kontrol et
                         for token in parsed['tokens']:
+                            # SADECE ALIM (İŞLEMLERİNİ YAKALA
+                            if token.get('type') != 'buy':
+                                print(f"   ⛔ Satış işlemi - atlanıyor (type: {token.get('type')})")
+                                continue
+                            
                             if token.get('mint'):
-                                print(f"   🔎 Token kontrol ediliyor: {token['mint'][:16]}...")
+                                print(f"   🔎 Token kontrol ediliyor: {token['mint'][:16]}... (ALİM)")
                                 mcap = await self.get_token_mcap(token['mint'])
                                 
                                 if mcap:
