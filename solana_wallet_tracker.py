@@ -93,33 +93,73 @@ class SolanaWalletTracker:
         limit: int = 10
     ) -> List[Dict]:
         """Cüzdan işlemlerini getir"""
-        try:
-            pubkey = Pubkey.from_string(wallet_address)
-            signatures = await self.client.get_signatures_for_address(
-                pubkey,
-                limit=limit
-            )
-            
-            transactions = []
-            if signatures.value:
+        max_retries = 3
+        retry_delay = 2
+        
+        for attempt in range(max_retries):
+            try:
+                pubkey = Pubkey.from_string(wallet_address)
+                
+                # Signatures'ları al
+                signatures = await asyncio.wait_for(
+                    self.client.get_signatures_for_address(pubkey, limit=limit),
+                    timeout=30
+                )
+                
+                if not signatures.value:
+                    return []
+                
+                transactions = []
+                # Her transaction'ı tek tek al (rate limit için küçük gecikme)
                 for sig_info in signatures.value:
-                    tx = await self.client.get_transaction(
-                        sig_info.signature,
-                        encoding="jsonParsed",
-                        max_supported_transaction_version=0
-                    )
-                    if tx.value:
-                        transactions.append({
-                            'signature': str(sig_info.signature),
-                            'slot': sig_info.slot,
-                            'timestamp': sig_info.block_time,
-                            'transaction': tx.value
-                        })
-            
-            return transactions
-        except Exception as e:
-            print(f"İşlemler alınamadı {wallet_address}: {str(e)}")
-            return []
+                    try:
+                        tx = await asyncio.wait_for(
+                            self.client.get_transaction(
+                                sig_info.signature,
+                                encoding="jsonParsed",
+                                max_supported_transaction_version=0
+                            ),
+                            timeout=15
+                        )
+                        
+                        if tx.value:
+                            transactions.append({
+                                'signature': str(sig_info.signature),
+                                'slot': sig_info.slot,
+                                'timestamp': sig_info.block_time,
+                                'transaction': tx.value
+                            })
+                        
+                        # Rate limit için küçük gecikme
+                        await asyncio.sleep(0.1)
+                        
+                    except asyncio.TimeoutError:
+                        print(f"   ⚠️  Timeout: {str(sig_info.signature)[:16]}...")
+                        continue
+                    except Exception as e:
+                        print(f"   ⚠️  TX okunamadı: {str(e)}")
+                        continue
+                
+                return transactions
+                
+            except asyncio.TimeoutError:
+                if attempt < max_retries - 1:
+                    print(f"   ⚠️  RPC timeout, tekrar deneniyor ({attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    print(f"❌ RPC timeout - maksimum deneme aşıldı {wallet_address[:8]}...")
+                    return []
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    print(f"   ⚠️  Hata: {str(e)}, tekrar deneniyor ({attempt + 1}/{max_retries})...")
+                    await asyncio.sleep(retry_delay * (attempt + 1))
+                    continue
+                else:
+                    print(f"❌ İşlemler alınamadı {wallet_address[:8]}...: {str(e)}")
+                    return []
+        
+        return []
     
     async def parse_transaction(self, tx_data: Dict) -> Optional[Dict]:
         """İşlemi parse et ve token transferlerini çıkar"""

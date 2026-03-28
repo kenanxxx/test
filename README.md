@@ -16,10 +16,32 @@ Solana ağında belirli market cap aralığında birden fazla cüzdanın token i
 
 ## Kurulum
 
+### 1. Gereksinimleri Yükle
+
 ```bash
-# Gereksinimleri yükle
 pip install -r requirements.txt
 ```
+
+### 2. RPC Endpoint Ayarla (🔥 ÖNEMLİ!)
+
+**Public RPC yeterli değil!** 5 cüzdan takip için **ücretsiz premium RPC** gereklidir.
+
+➡️ **[RPC_SETUP.md](RPC_SETUP.md) dosyasını okuyun!**
+
+**Hızlı kurulum (Helius - Önerilen):**
+
+1. https://www.helius.dev/ adresine kaydol
+2. API key al
+3. `.env` dosyasında güncelle:
+   ```env
+   SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY
+   ```
+
+**Ücretsiz RPC seçenekleri:**
+- 🔥 **Helius:** 100,000 istek/gün
+- ⚡ **QuickNode:** 250,000 istek/gün  
+- 🚀 **Alchemy:** 300M compute units/ay
+- 💪 **Ankr:** 500,000 istek/gün
 
 ## Kullanım
 
@@ -147,12 +169,40 @@ Aşağıdaki API'leri de kullanabilirsiniz:
 - CoinGecko API  
 - Birdeye API
 
+## ⚠️ Sorun Giderme
+
+### "RPC timeout" veya "429 Too Many Requests" hatası
+
+**Sebep:** Public RPC rate limit yapıyor.
+
+**Çözüm:** 
+1. **[RPC_SETUP.md](RPC_SETUP.md) dosyasını okuyun**
+2. Ücretsiz Helius/QuickNode/Alchemy RPC kullanın
+### İşlemler yakalanmıyor
+
+**Kontrol listesi:**
+1. ✅ RPC endpoint çalışıyor mu? (Premium RPC kullanın)
+2. ✅ Cüzdanlar doğru mu?
+3. ✅ Market cap aralığı uygun mu?
+4. ✅ Cüzdanlarda işlem yapılıyor mu?
+
+**Debug modu:**
+Program her adımda detaylı log verir:
+```
+🔍 Yeni TX tespit edildi: 5aB2C3dE4fG5...
+   ✓ 2 token değişimi bulundu
+   🔎 Token kontrol ediliyor: 7xKXtg2CW...
+   💰 Market Cap: $5,234,567
+   ✅ Market cap aralıkta!
+```
+
 ## Notlar
 
 ⚠️ **Önemli:**
-- Public RPC rate limit'e takılabilir. Üretim için özel RPC kullanın (Helius, QuickNode, vb.)
-- Market cap verileri DexScreener'dan gelir ve birkaç saniye gecikmeli olabilir
-- Cache sistemi 5 dakika boyunca market cap verilerini saklar
+- 🔥 **Public RPC yeterli değildir!** Premium RPC kullanın ([RPC_SETUP.md](RPC_SETUP.md))
+- 📊 Market cap verileri DexScreener'dan gelir (birkaç saniye gecikme olabilir)
+- 💾 Cache sistemi 5 dakika boyunca market cap verilerini saklar
+- 🔄 Retry mekanizması timeout'larda otomatik yeniden deneme yapar
 
 ## Lisans
 
