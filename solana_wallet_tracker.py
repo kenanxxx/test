@@ -134,10 +134,10 @@ class SolanaWalletTracker:
                         await asyncio.sleep(0.1)
                         
                     except asyncio.TimeoutError:
-                        print(f"   ⚠️  Timeout: {str(sig_info.signature)[:16]}...")
+                        print(f"   ⏱️  Timeout: {str(sig_info.signature)[:16]}... (RPC yanıt vermiyor)")
                         continue
                     except Exception as e:
-                        print(f"   ⚠️  TX okunamadı: {str(e)}")
+                        print(f"   ❌ TX okunamadı {str(sig_info.signature)[:16]}...: {type(e).__name__} - {str(e)}")
                         continue
                 
                 return transactions
@@ -243,8 +243,8 @@ class SolanaWalletTracker:
         
         while self.is_running:
             try:
-                # Son işlemleri al
-                transactions = await self.get_wallet_transactions(wallet_address, limit=10)
+                # Son işlemleri al (limit artırıldı - daha fazla işlem tara)
+                transactions = await self.get_wallet_transactions(wallet_address, limit=15)
                 
                 if first_run:
                     # İlk çalıştırmada sadece son signature'ı kaydet

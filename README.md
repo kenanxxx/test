@@ -171,13 +171,29 @@ Aşağıdaki API'leri de kullanabilirsiniz:
 
 ## ⚠️ Sorun Giderme
 
+### RPC Testi
+
+RPC endpoint'inizin çalışıp çalışmadığını test edin:
+
+```bash
+python test_rpc.py
+```
+
+Bu script:
+- ✅ RPC sağlık kontrolü
+- ✅ Slot okuma testi
+- ✅ Cüzdan işlemleri okuma testi
+- ✅ İşlem detayı okuma testi
+- 📊 Birden fazla RPC karşılaştırma
+
 ### "RPC timeout" veya "429 Too Many Requests" hatası
 
 **Sebep:** Public RPC rate limit yapıyor.
 
 **Çözüm:** 
-1. **[RPC_SETUP.md](RPC_SETUP.md) dosyasını okuyun**
-2. Ücretsiz Helius/QuickNode/Alchemy RPC kullanın
+1. **`python test_rpc.py` çalıştırın** - RPC'yi test edin
+2. **[RPC_SETUP.md](RPC_SETUP.md) dosyasını okuyun**
+3. Ücretsiz Helius/QuickNode/Alchemy RPC kullanın
 ### İşlemler yakalanmıyor
 
 **Kontrol listesi:**
