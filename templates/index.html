@@ -258,6 +258,39 @@
             margin-top: 15px;
         }
         
+        .wallet-info {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+        }
+        
+        .wallet-emoji {
+            font-size: 1.5em;
+        }
+        
+        .wallet-label {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+        
+        .wallet-name {
+            font-size: 1.1em;
+            font-weight: 700;
+        }
+        
+        .wallet-address-short {
+            font-family: monospace;
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+        
         .detail-item {
             font-size: 0.9em;
             color: #666;
@@ -401,7 +434,11 @@
                     
                     <div class="form-group">
                         <label for="wallets">Cüzdanlar (Her satıra bir cüzdan)</label>
-                        <textarea id="wallets" placeholder="7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5&#10;HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH"></textarea>
+                        <textarea id="wallets" placeholder="💎|Whale #1|7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5&#10;🔥|Smart Trader|HN7cABqLq46Es1jh92dQQisAq662SmxELLLsHHe4YWrH&#10;veya sadece adres:&#10;6pkpMrR9Unic4hCCY9NbjW3TRKAQh132ThcsLDBBtKGD"></textarea>
+                        <small style="color: #666; font-size: 0.85em; margin-top: 5px; display: block;">
+                            💡 Format: <strong>emoji|isim|adres</strong> veya sadece <strong>adres</strong><br>
+                            👉 Örnek: 💎|Whale Hunter|7YttLkHD...2pbs
+                        </small>
                     </div>
                     
                     <div class="form-group">
@@ -672,8 +709,23 @@
                     return;
                 }
                 
-                container.innerHTML = data.transactions.map(tx => `
+                container.innerHTML = data.transactions.map(tx => {
+                    // Cüzdan bilgisi
+                    const walletEmoji = tx.wallet_emoji || '👤';
+                    const walletName = tx.wallet_name || 'Bilinmeyen Cüzdan';
+                    const walletShort = `${tx.wallet.substring(0, 8)}...${tx.wallet.substring(tx.wallet.length - 8)}`;
+                    
+                    return `
                     <div class="transaction-item ${tx.type === 'sell' ? 'sell' : ''}">
+                        <!-- Cüzdan Bilgisi -->
+                        <div class="wallet-info">
+                            <div class="wallet-emoji">${walletEmoji}</div>
+                            <div class="wallet-label">
+                                <div class="wallet-name">${walletName}</div>
+                                <div class="wallet-address-short">${walletShort}</div>
+                            </div>
+                        </div>
+                        
                         <div class="transaction-header">
                             <div class="token-name">
                                 <span>${tx.token_name} (${tx.token_symbol})</span>
@@ -685,10 +737,6 @@
                         </div>
                         
                         <div class="transaction-details">
-                            <div class="detail-item">
-                                <span class="detail-label">Cüzdan:</span><br>
-                                <span class="wallet-address">${tx.wallet.substring(0, 8)}...${tx.wallet.substring(tx.wallet.length - 8)}</span>
-                            </div>
                             <div class="detail-item">
                                 <span class="detail-label">Miktar:</span><br>
                                 ${tx.amount.toFixed(4)} ${tx.token_symbol}
@@ -708,7 +756,8 @@
                             <a href="${tx.solscan_url}" target="_blank" class="link-btn">🔍 Solscan</a>
                         </div>
                     </div>
-                `).join('');
+                `;
+                }).join('');
                 
             } catch (error) {
                 console.error('İşlemler yüklenemedi:', error);

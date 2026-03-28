@@ -252,6 +252,12 @@ class WebApp:
         # Timestamp ekle
         notification['detected_at'] = datetime.now().isoformat()
         
+        # Cüzdan etiketini ekle
+        wallet_address = notification.get('wallet', '')
+        label = Config.get_wallet_label(wallet_address)
+        notification['wallet_emoji'] = label.get('emoji', '')
+        notification['wallet_name'] = label.get('name', '')
+        
         # History'e ekle
         self.transactions_history.append(notification)
         

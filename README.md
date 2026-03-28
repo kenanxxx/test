@@ -120,10 +120,40 @@ nano .env
 SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 MIN_MCAP=100000
 MAX_MCAP=10000000
-WALLETS=wallet1,wallet2,wallet3
+
+# Cüzdanlar - Emoji ve isim ekleyebilirsiniz!
+WALLETS=💎|Whale Hunter|7YttLkHD...2pbs,🔥|Smart Trader|HN7cAB...YWrH
+
 WEB_PORT=8080
-POLL_INTERVAL=10
+POLL_INTERVAL=5
 ```
+
+### Cüzdan Formatı
+
+🎯 **Üç farklı format desteklenir:**
+
+1. **Emoji + İsim + Adres** (önerilen)
+   ```
+   💎|Whale Hunter|7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5
+   ```
+
+2. **İsim + Adres**
+   ```
+   My Wallet|6pkpMrR9Unic4hCCY9NbjW3TRKAQh132ThcsLDBBtKGD
+   ```
+
+3. **Sadece Adres**
+   ```
+   4VR5eVLqnqvHZASaGVyUjSY67U7hHgFAqyhAHPNK2pbs
+   ```
+
+**Önerilen Emojiler:**
+- 💎 Whale / Büyük Cüzdan
+- 🔥 Aktif Trader
+- 🤖 Bot Cüzdanları
+- ⭐ Favoriler
+- 💀 Risk Alıcı
+- 🎯 Hedef Takip
 
 ## Yapılandırma Parametreleri
 
