@@ -169,9 +169,12 @@ class SolanaWalletTracker:
             if not tx.transaction.meta:
                 return None
             
+            # Timestamp'i direkt kullan (Unix timestamp)
+            timestamp = tx_data['timestamp'] if tx_data['timestamp'] else int(datetime.now().timestamp())
+            
             parsed_info = {
                 'signature': tx_data['signature'],
-                'timestamp': datetime.fromtimestamp(tx_data['timestamp']) if tx_data['timestamp'] else None,
+                'timestamp': timestamp,  # Unix timestamp (int)
                 'slot': tx_data['slot'],
                 'success': tx.transaction.meta.err is None,
                 'tokens': []
@@ -338,14 +341,7 @@ class SolanaWalletTracker:
         # Padre.gg trade URL
         trade_url = f"https://trade.padre.gg/trade/solana/{token_info['mint']}"
         
-        # Timestamp'ı serialize et
-        timestamp = tx_info['timestamp']
-        if isinstance(timestamp, datetime):
-            timestamp = int(timestamp.timestamp())  # Unix timestamp'e çevir
-        elif timestamp is None:
-            timestamp = int(datetime.now().timestamp())
-        
-        # Notification data (JSON serializable)
+        # Notification data (JSON serializable) - timestamp zaten int
         notification = {
             'wallet': wallet,
             'token_address': token_info['mint'],
@@ -353,8 +349,8 @@ class SolanaWalletTracker:
             'token_symbol': symbol,
             'market_cap': mcap,
             'amount': real_amount,
-            'type': token_info['type'],
-            'timestamp': timestamp,  # Unix timestamp (int)
+            'type': 'buy',  # Sadece buy işlemleri buraya gelir
+            'timestamp': tx_info['timestamp'],  # Zaten Unix timestamp (int)
             'signature': tx_info['signature'],
             'solscan_url': f"https://solscan.io/tx/{tx_info['signature']}",
             'trade_url': trade_url

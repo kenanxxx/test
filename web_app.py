@@ -37,6 +37,7 @@ class WebApp:
         self.app.router.add_get('/', self.index)
         self.app.router.add_get('/api/status', self.get_status)
         self.app.router.add_get('/api/transactions', self.get_transactions)
+        self.app.router.add_post('/api/transactions/clear', self.clear_transactions)
         self.app.router.add_post('/api/start', self.start_tracker)
         self.app.router.add_post('/api/stop', self.stop_tracker)
         self.app.router.add_post('/api/config', self.update_config)
@@ -98,6 +99,14 @@ class WebApp:
         
         return web.json_response({
             'transactions': transactions
+        })
+    
+    async def clear_transactions(self, request):
+        """İşlem geçmişini temizle"""
+        self.transactions_history = []
+        return web.json_response({
+            'success': True,
+            'message': 'İşlem geçmişi temizlendi'
         })
     
     async def get_config(self, request):

@@ -430,7 +430,10 @@
             
             <!-- Sağ Kolon: İşlemler -->
             <div class="card">
-                <h2>📈 Bulunan İşlemler (Sadece Alımlar)</h2>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">📈 Bulunan İşlemler (Sadece Alımlar)</h2>
+                    <button class="btn-danger" onclick="clearTransactions()" style="flex: 0; padding: 10px 20px;">🗑️ Temizle</button>
+                </div>
                 <div class="transactions" id="transactions">
                     <div class="no-transactions">
                         Henüz işlem tespit edilmedi. Tracker'ı başlatın.
@@ -446,6 +449,35 @@
         // Tarih formatla
         function formatDate(timestamp) {
             try {
+                // Null/undefined kontrolü
+                if (!timestamp || timestamp === 0) {
+                    return 'Bilinmiyor';
+                }
+                
+                // String ise sayıya çevir
+                if (typeof timestamp === 'string') {
+                    // ISO string ise direkt parse et
+                    if (timestamp.includes('T')) {
+                        const date = new Date(timestamp);
+                        if (!isNaN(date.getTime())) {
+                            return date.toLocaleString('tr-TR', {
+                                year: 'numeric',
+                                month: '2-digit',
+                                day: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit'
+                            });
+                        }
+                    }
+                    timestamp = parseInt(timestamp);
+                }
+                
+                // Sayı değilse Bilinmiyor
+                if (typeof timestamp !== 'number' || isNaN(timestamp)) {
+                    return 'Bilinmiyor';
+                }
+                
                 // Timestamp saniye veya milisaniye olabilir
                 let date;
                 if (timestamp > 10000000000) {
@@ -571,6 +603,27 @@
                 }
             } catch (error) {
                 showAlert('Tracker durdurulamadı: ' + error, 'error');
+            }
+        }
+        
+        // İşlem geçmişini temizle
+        async function clearTransactions() {
+            if (!confirm('İşlem geçmişini temizlemek istediğinizden emin misiniz?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/transactions/clear', { method: 'POST' });
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert('İşlem geçmişi temizlendi!', 'success');
+                    loadTransactions();
+                } else {
+                    showAlert('Hata: ' + result.error, 'error');
+                }
+            } catch (error) {
+                showAlert('İşlemler temizlenemedi: ' + error, 'error');
             }
         }
         
