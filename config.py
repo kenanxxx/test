@@ -34,7 +34,7 @@ class Config:
     WEB_PORT = int(os.getenv("WEB_PORT", "8080"))
     
     # Polling interval (saniye) - İşlemleri kontrol etme sıklığı
-    POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "5"))  # 5 saniye (daha hızlı)
+    POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "2"))  # 2 saniye (çok hızlı!)
     
     # Cache süresi (saniye)
     CACHE_DURATION = int(os.getenv("CACHE_DURATION", "300"))
