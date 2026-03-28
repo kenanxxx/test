@@ -166,7 +166,8 @@ class WebApp:
     def save_env_file(self):
         """Config'i .env dosyasına kaydet"""
         env_path = Path(__file__).parent / '.env'
-        with open(env_path, 'w') as f:
+        # UTF-8 encoding ile kaydet (emoji desteği için)
+        with open(env_path, 'w', encoding='utf-8') as f:
             f.write(f"SOLANA_RPC_URL={Config.SOLANA_RPC_URL}\n")
             f.write(f"MIN_MCAP={Config.MIN_MCAP}\n")
             f.write(f"MAX_MCAP={Config.MAX_MCAP}\n")
