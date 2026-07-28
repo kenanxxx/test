@@ -223,8 +223,14 @@ class PumpFunAnalyzer:
             # --- determine token decimals reliably ---
             decimals = 6  # default fallback
 
-            # 1) preferred: token supply RPC
-            mint_supply = await self._rpc(self.client.get_token_supply, token_mint)
+            # 1) preferred: token supply RPC (if available on client)
+            mint_supply = None
+            supply_func = getattr(self.client, "get_token_supply", None)
+            if supply_func:
+                mint_supply = await self._rpc(supply_func, token_mint)
+            else:
+                print(f"info: SolanaClient has no get_token_supply, falling back to mint account parsing for {token_mint}")
+
             try:
                 if mint_supply:
                     if isinstance(mint_supply, dict):
