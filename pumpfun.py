@@ -181,40 +181,95 @@ class PumpFunAnalyzer:
     def add_graduation_callback(self, callback):
         self.graduation_callbacks.append(callback)
 
-    async def analyze_holders(self, token_mint: str) -> tuple:
+    async def analyze_holders(self, token_mint: str, fresh_threshold: int = 6000) -> tuple:
+        """
+        Returns (fresh_pct, bundle_pct).
+        - fresh_threshold: seconds to consider a wallet 'fresh' (default kept as original, changeable).
+        """
         try:
+            # --- determine token decimals robustly ---
+            mint_info = await self.client.get_account_info(token_mint)
+            decimals = 6  # fallback
+            try:
+                if mint_info:
+                    data = mint_info.get("data", mint_info)
+                    # Try known shapes:
+                    if isinstance(data, dict) and "parsed" in data:
+                        parsed = data["parsed"].get("info", {})
+                        decimals = int(parsed.get("decimals", decimals))
+                    elif isinstance(data, list) and len(data) > 0:
+                        # sometimes returned as [base64, ...]
+                        # leave fallback
+                        pass
+            except Exception:
+                pass
+
             largest = await self.client.get_token_largest_accounts(token_mint)
             if largest:
                 enriched = []
                 for a in largest[:10]:
-                    addr = a["address"]
-                    amount = float(a["amount"]) / 1e6
+                    # support both possible shapes from RPC
+                    addr = a.get("address") or a.get("pubkey") or a.get("account")
+                    raw_amount = None
+                    if "amount" in a:
+                        raw_amount = a.get("amount")
+                    elif "uiAmount" in a:
+                        # already scaled - convert to raw using decimals
+                        raw_amount = float(a.get("uiAmount")) * (10 ** decimals)
+                    elif "amount" in a.get("tokenAmount", {}):
+                        raw_amount = a["tokenAmount"]["amount"]
+                    if raw_amount is None:
+                        continue
+                    try:
+                        amount = float(raw_amount) / (10 ** decimals)
+                    except Exception:
+                        amount = 0.0
+
                     info = await self.client.get_account_info(addr)
-                    if info:
-                        parsed = info.get("data", {}).get("parsed", {})
-                        owner = parsed.get("info", {}).get("owner")
-                    else:
+                    owner = None
+                    try:
+                        # robust owner extraction
+                        if info:
+                            d = info.get("data", info)
+                            if isinstance(d, dict):
+                                # nested parsed path
+                                owner = d.get("parsed", {}).get("info", {}).get("owner") or d.get("owner")
+                            elif isinstance(d, list):
+                                # some clients return list forms, try parsed inside
+                                try:
+                                    parsed = d[0].get("parsed", {})
+                                    owner = parsed.get("info", {}).get("owner")
+                                except Exception:
+                                    owner = None
+                    except Exception:
                         owner = None
+
                     enriched.append({"address": addr, "amount": amount, "owner": owner})
                 largest = enriched
             else:
+                # fallback to program accounts as before; keep decimals handling
                 accounts = await self.client.get_program_accounts(
                     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                     [{"dataSize": 165}, {"memcmp": {"offset": 0, "bytes": token_mint}}],
                 )
                 if not accounts:
                     return ("?", "?")
-                accounts.sort(key=lambda a: float(a["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"]), reverse=True)
+                accounts.sort(
+                    key=lambda a: float(a["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"]),
+                    reverse=True,
+                )
                 largest = []
                 for a in accounts[:10]:
                     info = a["account"]["data"]["parsed"]["info"]
+                    amt_raw = float(info["tokenAmount"]["amount"])
+                    dec = int(info["tokenAmount"].get("decimals", decimals))
                     largest.append({
                         "address": a["pubkey"],
-                        "amount": float(info["tokenAmount"]["amount"]) / 1e6,
+                        "amount": amt_raw / (10 ** dec),
                         "owner": info.get("owner"),
                     })
 
-            fresh_threshold = 6000
+            # thresholds & caches
             owner_cache = {}
 
             async def get_wallet_first_slot(owner):
@@ -225,7 +280,7 @@ class PumpFunAnalyzer:
                 sigs = await self.client.get_signatures_for_address(owner, 100)
                 if sigs:
                     oldest = sigs[-1]
-                    owner_cache[owner] = (oldest["blockTime"], oldest.get("slot"))
+                    owner_cache[owner] = (oldest.get("blockTime"), oldest.get("slot"))
                 else:
                     owner_cache[owner] = (None, None)
                 return owner_cache[owner]
@@ -252,8 +307,11 @@ class PumpFunAnalyzer:
 
             fresh_pct = round((fresh_total / total) * 100, 1)
             bundle_pct = round((bundle_total / total) * 100, 1)
+            # debug: print sample
+            print(f"[analyze_holders] token={token_mint} total={total:.6f} fresh={fresh_total:.6f} bundle={bundle_total:.6f} decimals={decimals}")
             return (fresh_pct, bundle_pct)
-        except:
+        except Exception as e:
+            print(f"analyze_holders error for {token_mint}: {e}")
             return ("?", "?")
 
 
