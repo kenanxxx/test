@@ -19,6 +19,30 @@ class PumpFunAnalyzer:
         self.client = solana_client
         self.tracked_tokens = {}
         self.graduation_callbacks = []
+        # limit concurrent RPC calls to avoid rate limiting
+        self.rpc_semaphore = asyncio.Semaphore(8)
+
+    async def _rpc(self, func, *args, retries: int = 4, backoff: float = 0.5, **kwargs):
+        """Helper wrapper for RPC calls with semaphore, retries, and exponential backoff."""
+        last_exc = None
+        for attempt in range(retries):
+            try:
+                async with self.rpc_semaphore:
+                    return await func(*args, **kwargs)
+            except Exception as e:
+                last_exc = e
+                msg = str(e)
+                # treat rate limit / RPC throttle similarly
+                if 'rate limited' in msg.lower() or 'rate limit' in msg.lower() or '429' in msg or '-32429' in msg:
+                    await asyncio.sleep(backoff * (2 ** attempt))
+                    continue
+                # non-rate-limit error -> break and re-raise after loop
+                await asyncio.sleep(backoff * (2 ** attempt))
+        # final attempt failed
+        if last_exc:
+            # return the exception so callers can decide; don't raise here to keep flow resilient
+            print(f"RPC error after retries: {last_exc}")
+        return None
 
     def calculate_market_cap(self, virtual_sol: float, virtual_tokens: float, total_supply: float, sol_price_usd: float) -> float:
         if virtual_tokens == 0:
@@ -143,16 +167,16 @@ class PumpFunAnalyzer:
     async def scan_new_tokens(self) -> List[TokenInfo]:
         new_tokens = []
         try:
-            signatures = await self.client.get_signatures_for_address(
-                PUMP_FUN_PROGRAM, limit=20
-            )
+            signatures = await self._rpc(self.client.get_signatures_for_address, PUMP_FUN_PROGRAM, 20)
+            if not signatures:
+                return new_tokens
 
             for sig_info in signatures:
                 sig = sig_info.get("signature")
                 if not sig:
                     continue
 
-                tx = await self.client.get_transaction(sig)
+                tx = await self._rpc(self.client.get_transaction, sig)
                 if not tx:
                     continue
 
@@ -185,57 +209,79 @@ class PumpFunAnalyzer:
         """
         Returns (fresh_pct, bundle_pct).
         - fresh_threshold: seconds to consider a wallet 'fresh' (default kept as original, changeable).
+        Improvements:
+        - Use getTokenSupply when available to determine decimals reliably.
+        - Add RPC retries/backoff and concurrency limiting to avoid rate limits.
+        - Log raw_amount -> amount mapping for debugging.
         """
         try:
             # --- determine token decimals robustly ---
-            mint_info = await self.client.get_account_info(token_mint)
-            decimals = 6  # fallback
+            decimals = 6  # default fallback
+
+            # 1) try token supply RPC (preferred)
+            mint_supply = await self._rpc(self.client.get_token_supply, token_mint)
             try:
-                if mint_info:
-                    data = mint_info.get("data", mint_info)
-                    # Try known shapes:
-                    if isinstance(data, dict) and "parsed" in data:
-                        parsed = data["parsed"].get("info", {})
-                        decimals = int(parsed.get("decimals", decimals))
-                    elif isinstance(data, list) and len(data) > 0:
-                        # sometimes returned as [base64, ...]
-                        # leave fallback
-                        pass
+                if mint_supply:
+                    if isinstance(mint_supply, dict):
+                        if "value" in mint_supply and isinstance(mint_supply["value"], dict):
+                            decimals = int(mint_supply["value"].get("decimals", decimals))
+                        else:
+                            decimals = int(mint_supply.get("decimals", decimals))
             except Exception:
                 pass
 
-            largest = await self.client.get_token_largest_accounts(token_mint)
+            # 2) fallback to mint account parsing
+            if decimals == 6:
+                mint_info = await self._rpc(self.client.get_account_info, token_mint)
+                try:
+                    if mint_info:
+                        data = mint_info.get("data", mint_info)
+                        if isinstance(data, dict) and "parsed" in data:
+                            parsed = data["parsed"].get("info", {})
+                            decimals = int(parsed.get("decimals", decimals))
+                except Exception:
+                    pass
+
+            # --- get largest accounts ---
+            largest_resp = await self._rpc(self.client.get_token_largest_accounts, token_mint)
+            largest = largest_resp or []
+
             if largest:
                 enriched = []
-                for a in largest[:10]:
+                for idx, a in enumerate(largest[:10]):
                     # support both possible shapes from RPC
                     addr = a.get("address") or a.get("pubkey") or a.get("account")
                     raw_amount = None
-                    if "amount" in a:
+                    # prefer explicit "amount" if present (string of raw units)
+                    if "amount" in a and a.get("amount") is not None:
                         raw_amount = a.get("amount")
-                    elif "uiAmount" in a:
-                        # already scaled - convert to raw using decimals
-                        raw_amount = float(a.get("uiAmount")) * (10 ** decimals)
-                    elif "amount" in a.get("tokenAmount", {}):
+                    # uiAmount is already scaled by client; convert it back to raw for consistent handling
+                    elif "uiAmount" in a and a.get("uiAmount") is not None:
+                        try:
+                            raw_amount = float(a.get("uiAmount")) * (10 ** decimals)
+                        except Exception:
+                            raw_amount = None
+                    # tokenAmount nested form
+                    elif isinstance(a.get("tokenAmount"), dict) and "amount" in a.get("tokenAmount"):
                         raw_amount = a["tokenAmount"]["amount"]
+
                     if raw_amount is None:
+                        # skip if we couldn't determine amount
                         continue
+
                     try:
                         amount = float(raw_amount) / (10 ** decimals)
                     except Exception:
                         amount = 0.0
 
-                    info = await self.client.get_account_info(addr)
+                    info = await self._rpc(self.client.get_account_info, addr)
                     owner = None
                     try:
-                        # robust owner extraction
                         if info:
                             d = info.get("data", info)
                             if isinstance(d, dict):
-                                # nested parsed path
                                 owner = d.get("parsed", {}).get("info", {}).get("owner") or d.get("owner")
                             elif isinstance(d, list):
-                                # some clients return list forms, try parsed inside
                                 try:
                                     parsed = d[0].get("parsed", {})
                                     owner = parsed.get("info", {}).get("owner")
@@ -244,11 +290,16 @@ class PumpFunAnalyzer:
                     except Exception:
                         owner = None
 
+                    # debug a few raw vs amount mappings
+                    if idx < 5:
+                        print(f"[analyze_holders-debug] token={token_mint} holder={addr} raw_amount={raw_amount} amount={amount} decimals={decimals} owner={owner}")
+
                     enriched.append({"address": addr, "amount": amount, "owner": owner})
                 largest = enriched
             else:
-                # fallback to program accounts as before; keep decimals handling
-                accounts = await self.client.get_program_accounts(
+                # fallback to program accounts
+                accounts = await self._rpc(
+                    self.client.get_program_accounts,
                     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
                     [{"dataSize": 165}, {"memcmp": {"offset": 0, "bytes": token_mint}}],
                 )
@@ -269,7 +320,6 @@ class PumpFunAnalyzer:
                         "owner": info.get("owner"),
                     })
 
-            # thresholds & caches
             owner_cache = {}
 
             async def get_wallet_first_slot(owner):
@@ -277,7 +327,7 @@ class PumpFunAnalyzer:
                     return (None, None)
                 if owner in owner_cache:
                     return owner_cache[owner]
-                sigs = await self.client.get_signatures_for_address(owner, 100)
+                sigs = await self._rpc(self.client.get_signatures_for_address, owner, 50)
                 if sigs:
                     oldest = sigs[-1]
                     owner_cache[owner] = (oldest.get("blockTime"), oldest.get("slot"))
@@ -290,10 +340,24 @@ class PumpFunAnalyzer:
                 block_time, slot = await get_wallet_first_slot(acc["owner"])
                 if block_time is None:
                     return (amount, False, None)
-                is_fresh = (time.time() - block_time) < fresh_threshold
+                # ensure block_time looks sane (int/float seconds)
+                try:
+                    bt = float(block_time)
+                except Exception:
+                    return (amount, False, None)
+                is_fresh = (time.time() - bt) < fresh_threshold
                 return (amount, is_fresh, slot)
 
-            results = await asyncio.gather(*[process(a) for a in largest])
+            # limit concurrent processing of holders to avoid bursts
+            tasks = []
+            sem = asyncio.Semaphore(8)
+
+            async def sem_process(a):
+                async with sem:
+                    return await process(a)
+
+            results = await asyncio.gather(*[sem_process(a) for a in largest])
+
             total = sum(r[0] for r in results)
             if total == 0:
                 return ("?", "?")
