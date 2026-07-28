@@ -36,11 +36,10 @@ class PumpFunAnalyzer:
                 if 'rate limited' in msg.lower() or 'rate limit' in msg.lower() or '429' in msg or '-32429' in msg:
                     await asyncio.sleep(backoff * (2 ** attempt))
                     continue
-                # non-rate-limit error -> break and re-raise after loop
+                # non-rate-limit error -> wait a bit and retry
                 await asyncio.sleep(backoff * (2 ** attempt))
         # final attempt failed
         if last_exc:
-            # return the exception so callers can decide; don't raise here to keep flow resilient
             print(f"RPC error after retries: {last_exc}")
         return None
 
@@ -205,20 +204,26 @@ class PumpFunAnalyzer:
     def add_graduation_callback(self, callback):
         self.graduation_callbacks.append(callback)
 
-    async def analyze_holders(self, token_mint: str, fresh_threshold: int = 6000) -> tuple:
+    async def analyze_holders(self, token_mint: str, fresh_threshold: int = 6000, tx_scan_limit: int = 300) -> tuple:
         """
         Returns (fresh_pct, bundle_pct).
-        - fresh_threshold: seconds to consider a wallet 'fresh' (default kept as original, changeable).
-        Improvements:
-        - Use getTokenSupply when available to determine decimals reliably.
-        - Add RPC retries/backoff and concurrency limiting to avoid rate limits.
-        - Log raw_amount -> amount mapping for debugging.
+        - fresh_threshold: seconds to consider a wallet 'fresh'.
+        - tx_scan_limit: how many recent transactions for the token to scan for bundle detection.
+
+        New approach:
+        - Determine decimals via get_token_supply (preferred) or mint account.
+        - Get largest holder accounts and their amounts (ui or raw -> normalized using decimals).
+        - For bundle detection: fetch recent transactions for the token mint, parse each transaction's accountKeys,
+          and if a transaction contains more than one of the holders, count those holders' amounts toward bundle_total for that slot.
+        - For fresh detection: instead of per-owner signature queries, derive first-seen blockTime per holder by scanning the same transaction list
+          (the earliest tx in which the holder appears in this token's txs).
+        This reduces per-owner RPC calls and avoids rate-limits.
         """
         try:
-            # --- determine token decimals robustly ---
+            # --- determine token decimals reliably ---
             decimals = 6  # default fallback
 
-            # 1) try token supply RPC (preferred)
+            # 1) preferred: token supply RPC
             mint_supply = await self._rpc(self.client.get_token_supply, token_mint)
             try:
                 if mint_supply:
@@ -230,7 +235,7 @@ class PumpFunAnalyzer:
             except Exception:
                 pass
 
-            # 2) fallback to mint account parsing
+            # 2) fallback: mint account parsing
             if decimals == 6:
                 mint_info = await self._rpc(self.client.get_account_info, token_mint)
                 try:
@@ -242,31 +247,26 @@ class PumpFunAnalyzer:
                 except Exception:
                     pass
 
-            # --- get largest accounts ---
+            # --- largest accounts ---
             largest_resp = await self._rpc(self.client.get_token_largest_accounts, token_mint)
             largest = largest_resp or []
 
+            holders = []
             if largest:
-                enriched = []
-                for idx, a in enumerate(largest[:10]):
-                    # support both possible shapes from RPC
+                for a in largest[:10]:
                     addr = a.get("address") or a.get("pubkey") or a.get("account")
                     raw_amount = None
-                    # prefer explicit "amount" if present (string of raw units)
                     if "amount" in a and a.get("amount") is not None:
                         raw_amount = a.get("amount")
-                    # uiAmount is already scaled by client; convert it back to raw for consistent handling
                     elif "uiAmount" in a and a.get("uiAmount") is not None:
                         try:
                             raw_amount = float(a.get("uiAmount")) * (10 ** decimals)
                         except Exception:
                             raw_amount = None
-                    # tokenAmount nested form
                     elif isinstance(a.get("tokenAmount"), dict) and "amount" in a.get("tokenAmount"):
                         raw_amount = a["tokenAmount"]["amount"]
 
                     if raw_amount is None:
-                        # skip if we couldn't determine amount
                         continue
 
                     try:
@@ -274,30 +274,8 @@ class PumpFunAnalyzer:
                     except Exception:
                         amount = 0.0
 
-                    info = await self._rpc(self.client.get_account_info, addr)
-                    owner = None
-                    try:
-                        if info:
-                            d = info.get("data", info)
-                            if isinstance(d, dict):
-                                owner = d.get("parsed", {}).get("info", {}).get("owner") or d.get("owner")
-                            elif isinstance(d, list):
-                                try:
-                                    parsed = d[0].get("parsed", {})
-                                    owner = parsed.get("info", {}).get("owner")
-                                except Exception:
-                                    owner = None
-                    except Exception:
-                        owner = None
-
-                    # debug a few raw vs amount mappings
-                    if idx < 5:
-                        print(f"[analyze_holders-debug] token={token_mint} holder={addr} raw_amount={raw_amount} amount={amount} decimals={decimals} owner={owner}")
-
-                    enriched.append({"address": addr, "amount": amount, "owner": owner})
-                largest = enriched
+                    holders.append({"address": addr, "amount": amount})
             else:
-                # fallback to program accounts
                 accounts = await self._rpc(
                     self.client.get_program_accounts,
                     "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
@@ -309,69 +287,113 @@ class PumpFunAnalyzer:
                     key=lambda a: float(a["account"]["data"]["parsed"]["info"]["tokenAmount"]["amount"]),
                     reverse=True,
                 )
-                largest = []
                 for a in accounts[:10]:
                     info = a["account"]["data"]["parsed"]["info"]
                     amt_raw = float(info["tokenAmount"]["amount"])
                     dec = int(info["tokenAmount"].get("decimals", decimals))
-                    largest.append({
-                        "address": a["pubkey"],
-                        "amount": amt_raw / (10 ** dec),
-                        "owner": info.get("owner"),
-                    })
+                    holders.append({"address": a["pubkey"], "amount": amt_raw / (10 ** dec)})
 
-            owner_cache = {}
+            if not holders:
+                return ("?", "?")
 
-            async def get_wallet_first_slot(owner):
-                if not owner:
-                    return (None, None)
-                if owner in owner_cache:
-                    return owner_cache[owner]
-                sigs = await self._rpc(self.client.get_signatures_for_address, owner, 50)
-                if sigs:
-                    oldest = sigs[-1]
-                    owner_cache[owner] = (oldest.get("blockTime"), oldest.get("slot"))
-                else:
-                    owner_cache[owner] = (None, None)
-                return owner_cache[owner]
+            # Build quick lookup
+            holder_map = {h["address"]: h["amount"] for h in holders}
+            holder_set = set(holder_map.keys())
 
-            async def process(acc):
-                amount = acc["amount"]
-                block_time, slot = await get_wallet_first_slot(acc["owner"])
-                if block_time is None:
-                    return (amount, False, None)
-                # ensure block_time looks sane (int/float seconds)
-                try:
-                    bt = float(block_time)
-                except Exception:
-                    return (amount, False, None)
-                is_fresh = (time.time() - bt) < fresh_threshold
-                return (amount, is_fresh, slot)
+            # --- Scan recent transactions for the token to detect bundles and first-seen times ---
+            sigs = await self._rpc(self.client.get_signatures_for_address, token_mint, tx_scan_limit)
+            if not sigs:
+                # fallback to previous owner-based approach for fresh detection only
+                print("No signatures available for tx-scan; cannot robustly detect bundles")
+                # fallback: mark fresh as unknown
+                total = sum(holder_map.values())
+                return ("?", "?")
 
-            # limit concurrent processing of holders to avoid bursts
-            tasks = []
-            sem = asyncio.Semaphore(8)
+            # We'll fetch transactions concurrently but bounded
+            async def fetch_tx(sig_info):
+                sig = sig_info.get("signature")
+                if not sig:
+                    return None
+                tx = await self._rpc(self.client.get_transaction, sig)
+                # attach blockTime/slot from sig_info if missing
+                if tx is None:
+                    return None
+                if not tx.get("slot"):
+                    tx["slot"] = sig_info.get("slot")
+                if not tx.get("blockTime"):
+                    tx["blockTime"] = sig_info.get("blockTime")
+                return tx
 
-            async def sem_process(a):
+            # limit concurrency
+            sem = asyncio.Semaphore(6)
+            async def sem_fetch(s):
                 async with sem:
-                    return await process(a)
+                    return await fetch_tx(s)
 
-            results = await asyncio.gather(*[sem_process(a) for a in largest])
+            txs = await asyncio.gather(*[sem_fetch(s) for s in sigs])
 
-            total = sum(r[0] for r in results)
+            # Process txs from oldest to newest to capture first-seen times
+            txs_filtered = [t for t in txs if t]
+            # sort by slot/blockTime ascending
+            def tx_key(t):
+                bt = t.get("blockTime")
+                if bt is None:
+                    return t.get("slot", 0)
+                return int(bt)
+
+            txs_filtered.sort(key=tx_key)
+
+            holder_first_seen = {addr: (None, None) for addr in holder_set}
+            slot_map = {}
+
+            for tx in txs_filtered:
+                slot = tx.get("slot")
+                block_time = tx.get("blockTime")
+                message = tx.get("transaction", {}).get("message", {})
+                account_keys = message.get("accountKeys", [])
+                # normalize account keys to strings
+                norm_keys = set()
+                for k in account_keys:
+                    if isinstance(k, str):
+                        norm_keys.add(k)
+                    elif isinstance(k, dict):
+                        # some RPC return dicts with pubkey
+                        pk = k.get("pubkey") or k.get("pubkeyOrAddress") or k.get("address")
+                        if pk:
+                            norm_keys.add(pk)
+                # find intersection
+                intersects = holder_set.intersection(norm_keys)
+                if intersects:
+                    for addr in intersects:
+                        if holder_first_seen.get(addr)[0] is None:
+                            holder_first_seen[addr] = (block_time, slot)
+                if len(intersects) > 1 and slot is not None:
+                    # sum amounts for the holders that appeared in this tx and add to slot_map
+                    s = slot
+                    slot_map.setdefault(s, 0)
+                    for addr in intersects:
+                        slot_map[s] += holder_map.get(addr, 0)
+
+            total = sum(holder_map.values())
             if total == 0:
                 return ("?", "?")
 
-            fresh_total = sum(r[0] for r in results if r[1])
-            slot_map = {}
-            for amt, _, slot in results:
-                if slot is not None:
-                    slot_map.setdefault(slot, []).append(amt)
-            bundle_total = sum(sum(v) for v in slot_map.values() if len(v) > 1)
+            # fresh_total: holders whose first-seen (in token txs) is within threshold
+            fresh_total = 0.0
+            for addr, amt in holder_map.items():
+                seen = holder_first_seen.get(addr)
+                if seen and seen[0] is not None:
+                    try:
+                        if (time.time() - float(seen[0])) < fresh_threshold:
+                            fresh_total += amt
+                    except Exception:
+                        pass
+
+            bundle_total = sum(v for v in slot_map.values() if v > 0)
 
             fresh_pct = round((fresh_total / total) * 100, 1)
             bundle_pct = round((bundle_total / total) * 100, 1)
-            # debug: print sample
+
             print(f"[analyze_holders] token={token_mint} total={total:.6f} fresh={fresh_total:.6f} bundle={bundle_total:.6f} decimals={decimals}")
             return (fresh_pct, bundle_pct)
         except Exception as e:
